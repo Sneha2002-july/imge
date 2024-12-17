@@ -1,0 +1,258 @@
+import java.awt.BorderLayout;
+import java.awt.CardLayout;
+import java.awt.Color;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
+import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.Period;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JSpinner;
+import javax.swing.JTextField;
+import javax.swing.SpinnerDateModel;
+import javax.swing.border.TitledBorder;
+
+import com.HIS.Controller.DoctorTableModel;
+import com.HIS.model.Doctor;
+import com.toedter.calendar.JDateChooser;
+
+public class DoctorProfilePanel extends JPanel {
+    protected JTextField nameField, lnameField, contactField, emailField, addressField, adressField2, addressField3, pinField, ageField;
+    protected JComboBox<String> qualificationDropDown;
+    protected JComboBox<String> departmentDropdown, specializationDropdown;
+    protected JSpinner startTimeSpinner, endTimeSpinner, availableFromDaySpinner, availableToDaySpinner;
+    protected JDateChooser dobPicker;
+    protected JCheckBox[] dayCheckBoxes;
+    protected JTextField consultationFeeField;
+    protected JButton saveButton;
+ 
+    protected final Map<String, List<String>> departmentSpecialisationMap = new HashMap<>();
+
+    public DoctorProfilePanel(CardLayout cardLayout, JPanel container, DoctorTableModel tableModel) {
+        setLayout(new BorderLayout(10, 10));
+
+        // Header Section
+        JPanel headerPanel = new JPanel();
+        headerPanel.setBackground(Color.BLUE);
+        JLabel headerLabel = new JLabel("Doctor Registration");
+        headerLabel.setFont(new Font("Arial", Font.BOLD, 20));
+        headerLabel.setForeground(Color.WHITE);
+        headerPanel.add(headerLabel);
+        add(headerPanel, BorderLayout.NORTH);
+
+        setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        JPanel formPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.CENTER;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        
+        initializeDepartmentSpecializationMap();      
+
+        // Initialize fields
+        nameField = new JTextField(15);
+        lnameField = new JTextField(15);
+        contactField = new JTextField(15);
+        emailField = new JTextField(15);
+        addressField = new JTextField(15);
+        adressField2 = new JTextField(15);
+        addressField3 = new JTextField(15);
+        pinField = new JTextField(15);
+        ageField = new JTextField(15);
+        ageField.setEditable(false);
+
+        qualificationDropDown = new JComboBox<>(new String[] {
+                "MBBS,MD", "MBBS,MS", "MBBS,DNB", "MBBS,MCh", "MD,DM", "MBBS,FRCS", "MBBS,MD,FRCP", "MBBS,DO"
+        });
+
+        departmentDropdown = new JComboBox<>(departmentSpecialisationMap.keySet().toArray(new String[0]));
+        specializationDropdown = new JComboBox<>();
+        
+        updateSpecializations();
+        
+        departmentDropdown.addActionListener(e -> updateSpecializations());
+        
+        startTimeSpinner = new JSpinner(new SpinnerDateModel());
+        endTimeSpinner = new JSpinner(new SpinnerDateModel());
+
+        startTimeSpinner.setEditor(new JSpinner.DateEditor(startTimeSpinner, "HH:mm"));
+        endTimeSpinner.setEditor(new JSpinner.DateEditor(endTimeSpinner, "HH:mm"));
+
+        dobPicker = new JDateChooser();
+        
+        consultationFeeField = new JTextField(15);
+        
+        String[] days = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"};
+        dayCheckBoxes = new JCheckBox[days.length];
+        JPanel daysPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
+        for (int i = 0; i < days.length; i++) {
+            dayCheckBoxes[i] = new JCheckBox(days[i]);
+            daysPanel.add(dayCheckBoxes[i]);
+        }
+
+        dobPicker.getDateEditor().addPropertyChangeListener("date", evt -> {
+            Date selectedDate = dobPicker.getDate();
+            if (selectedDate != null) {
+                LocalDate dob = selectedDate.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+                int age = calculateAge(dob);
+                ageField.setText(String.valueOf(age));
+            } else {
+                ageField.setText("");
+            }
+        });
+
+        // Add fields to the sections
+        addSection(formPanel, gbc, "Personal Information", 0, new JComponent[] {nameField, lnameField, dobPicker, ageField});
+        addSection(formPanel, gbc, "Contact Details", 1, new JComponent[] {contactField, emailField, addressField, adressField2, addressField3, pinField});
+        addSection(formPanel, gbc, "Additional Details", 2, new JComponent[] {qualificationDropDown, departmentDropdown, specializationDropdown, startTimeSpinner, endTimeSpinner, daysPanel, consultationFeeField});
+
+        gbc.gridx = 0;
+        gbc.gridy = 3;
+        gbc.gridwidth = 2;
+        gbc.anchor = GridBagConstraints.CENTER;
+
+        // Buttons for Save and Clear
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
+        saveButton = new JButton("Save");
+        saveButton.addActionListener(e -> saveDoctorProfile(tableModel));
+        JButton clearButton = new JButton("Clear");
+        clearButton.addActionListener(e -> clearFields());
+        buttonPanel.add(saveButton);
+        buttonPanel.add(clearButton);
+
+        formPanel.add(buttonPanel, gbc);
+
+        add(formPanel, BorderLayout.CENTER);
+
+        JButton goToBrowserButton = new JButton("Go to Browser Page");
+        goToBrowserButton.addActionListener(e -> cardLayout.show(container, "Browser"));
+        add(goToBrowserButton, BorderLayout.SOUTH);
+    }
+
+    public void initializeDepartmentSpecializationMap() {
+        departmentSpecialisationMap.put("Cardiology", Arrays.asList("Pediatric Cardiology", "Electrophysiology"));
+        departmentSpecialisationMap.put("Dermatology", Arrays.asList("Cosmetic Dermatology", "Pediatric Dermatology"));
+        departmentSpecialisationMap.put("Neurology", Arrays.asList("Neuroimmunology", "Epileptologist", "Pediatric Neurology"));
+        departmentSpecialisationMap.put("Pediatrics", Arrays.asList("Pediatric Cardiology", "Pediatric Neurology", "Pediatric Ophthalmology"));
+        departmentSpecialisationMap.put("Ophthalmology", Arrays.asList("Pediatric Ophthalmologist", "Retina Specialist"));
+    }
+
+    private void updateSpecializations() {
+        String selectedDepartment = (String) departmentDropdown.getSelectedItem();
+        List<String> specializations = departmentSpecialisationMap.getOrDefault(selectedDepartment, Collections.emptyList());
+        specializationDropdown.removeAllItems();
+        for (String specialization : specializations) {
+            specializationDropdown.addItem(specialization);
+        }
+    }
+
+    private void addSection(JPanel panel, GridBagConstraints gbc, String sectionTitle, int sectionIndex, JComponent[] components) {
+        JPanel sectionPanel = new JPanel(new GridBagLayout());
+        sectionPanel.setBackground(Color.WHITE);
+        sectionPanel.setBorder(BorderFactory.createLineBorder(Color.BLUE));
+        sectionPanel.setLayout(new GridBagLayout());
+        GridBagConstraints sectionGBC = new GridBagConstraints();
+        sectionGBC.insets = new Insets(5, 5, 5, 5);
+        sectionGBC.anchor = GridBagConstraints.CENTER;
+        sectionGBC.fill = GridBagConstraints.HORIZONTAL;
+
+        // Add section heading
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.gridwidth = 2;
+        JLabel sectionHeading = new JLabel(sectionTitle);
+        sectionHeading.setFont(new Font("Arial", Font.BOLD, 16));
+        sectionHeading.setForeground(Color.BLUE);
+        sectionPanel.add(sectionHeading, gbc);
+
+        // Add fields to the section
+        for (int i = 0; i < components.length; i++) {
+            gbc.gridx = i % 2 == 0 ? 0 : 1;
+            gbc.gridy = (i / 2) + 1;
+            panel.add(components[i], gbc);
+        }
+
+        panel.add(sectionPanel, gbc);
+    }
+
+    protected void saveDoctorProfile(DoctorTableModel tableModel) {
+        String name = nameField.getText().trim();
+        String lname = lnameField.getText().trim();
+        String contact = contactField.getText().trim();
+        String email = emailField.getText().trim();
+        String address = addressField.getText().trim();
+        String adress2 = adressField2.getText().trim();
+        String adress3 = addressField3.getText().trim();
+        String pincode = pinField.getText().trim();
+        
+        String ageText = ageField.getText().trim();
+        String qualification = (String) qualificationDropDown.getSelectedItem();
+        String department = (String) departmentDropdown.getSelectedItem();
+        String specialization = (String) specializationDropdown.getSelectedItem();
+        Date startTime = (Date) startTimeSpinner.getValue();
+        Date endTime = (Date) endTimeSpinner.getValue();
+        
+        ArrayList<String> availableDays = new ArrayList<>();
+        for (int i = 0; i < dayCheckBoxes.length; i++) {
+            if (dayCheckBoxes[i].isSelected()) {
+                availableDays.add(dayCheckBoxes[i].getText());
+            }
+        }
+
+        String consultationFee = consultationFeeField.getText().trim();
+
+        // Perform any validation and save the Doctor profile
+        // Validation code here (for example, checking empty fields)
+
+        // Example: If everything is valid, add a new doctor profile to the table model.
+        Doctor doctor = new Doctor(name, lname, contact, email, address, adress2, adress3, pincode, Integer.parseInt(ageText), qualification, department, specialization, startTime, endTime, availableDays, Double.parseDouble(consultationFee));
+        tableModel.addDoctor(doctor);
+    }
+
+    private int calculateAge(LocalDate dob) {
+        if (dob != null) {
+            Period period = Period.between(dob, LocalDate.now());
+            return period.getYears();
+        }
+        return 0;
+    }
+
+    protected void clearFields() {
+        nameField.setText("");
+        lnameField.setText("");
+        contactField.setText("");
+        emailField.setText("");
+        addressField.setText("");
+        adressField2.setText("");
+        addressField3.setText("");
+        pinField.setText("");
+        ageField.setText("");
+        qualificationDropDown.setSelectedIndex(0);
+        departmentDropdown.setSelectedIndex(0);
+        updateSpecializations();
+        startTimeSpinner.setValue(new Date());
+        endTimeSpinner.setValue(new Date());
+        Arrays.stream(dayCheckBoxes).forEach(cb -> cb.setSelected(false));
+        consultationFeeField.setText("");
+    }
+}
